@@ -150,7 +150,7 @@ function initializeMap() {
     // Set up year selector
     const yearSelect = document.getElementById('year-select');
     if (yearSelect) {
-        yearSelect.addEventListener('change', function() {
+        yearSelect.addEventListener('change', function () {
             const selectedYear = this.value;
             console.log('Year changed to:', selectedYear);
             loadMapData(selectedYear);
@@ -232,7 +232,7 @@ function filterOutlierCoordinates(geojson) {
         // Check if at least 50% of coordinates are in range
         const coordsInRange = allCoords.filter(([lon, lat]) => {
             return lon >= lonMin && lon <= lonMax &&
-                   lat >= latMin && lat <= latMax;
+                lat >= latMin && lat <= latMax;
         });
 
         return coordsInRange.length > allCoords.length * 0.5;
@@ -329,7 +329,7 @@ function renderCountyMap() {
         .attr('stroke', '#2c3e50')
         .attr('stroke-width', 1.5)
         .attr('fill-rule', 'evenodd')  // Important: use even-odd fill rule to handle complex polygons
-        .on('mouseover', function(event, d) {
+        .on('mouseover', function (event, d) {
             d3.select(this)
                 .attr('fill', '#3498db')
                 .attr('stroke-width', 2.5);
@@ -337,14 +337,14 @@ function renderCountyMap() {
             const countyName = d.properties.COUNTYNAME || d.properties.NAME || '未知縣市';
             showTooltip(`<strong>${countyName}</strong>`, event.pageX, event.pageY);
         })
-        .on('mouseout', function() {
+        .on('mouseout', function () {
             d3.select(this)
                 .attr('fill', '#e8f4f8')
                 .attr('stroke-width', 1.5);
 
             hideTooltip();
         })
-        .on('click', function(_event, d) {
+        .on('click', function (_event, d) {
             const countyName = d.properties.COUNTYNAME || d.properties.NAME || '未知縣市';
             console.log('Clicked county:', countyName);
         });
@@ -387,7 +387,7 @@ function renderTownMap() {
         .attr('stroke', '#34495e')
         .attr('stroke-width', 0.5)
         .attr('fill-rule', 'evenodd')  // Important: use even-odd fill rule to handle complex polygons
-        .on('mouseover', function(event, d) {
+        .on('mouseover', function (event, d) {
             d3.select(this)
                 .attr('fill', '#3498db')
                 .attr('stroke-width', 1.5);
@@ -395,7 +395,7 @@ function renderTownMap() {
             const townName = d.properties.TOWNNAME || d.properties.NAME || '未知鄉鎮';
             showTooltip(`<strong>${townName}</strong>`, event.pageX, event.pageY);
         })
-        .on('mouseout', function() {
+        .on('mouseout', function () {
             d3.select(this)
                 .attr('fill', '#e8f4f8')
                 .attr('stroke-width', 0.5);
@@ -499,7 +499,7 @@ function createLegend() {
         .style('border', 'none')
         .style('border-radius', '4px')
         .text('🔲 隱藏網格')
-        .on('click', function() {
+        .on('click', function () {
             toggleGrid();
         });
 
@@ -525,7 +525,7 @@ function createLegend() {
         .style('border', 'none')
         .style('border-radius', '4px')
         .text('主觀財富')
-        .on('click', function() {
+        .on('click', function () {
             switchWealthMode('subjective');
         });
 
@@ -539,7 +539,7 @@ function createLegend() {
         .style('border', 'none')
         .style('border-radius', '4px')
         .text('客觀財富')
-        .on('click', function() {
+        .on('click', function () {
             switchWealthMode('objective');
         });
 
@@ -766,42 +766,28 @@ function getDataForGridCell(x, y, w, h) {
         return projection.invert([mapX, mapY]);
     };
 
-    // Convert cell corners to geographic coordinates (accounting for current zoom/pan)
-    const topLeft = invertTransform(x, y);
-    const topRight = invertTransform(x + w, y);
-    const bottomLeft = invertTransform(x, y + h);
-    const bottomRight = invertTransform(x + w, y + h);
-    const center = invertTransform(x + w/2, y + h/2);
+    const p = 5;
+    const pointsToQuery = [
+        invertTransform(x + w / 2, y + h / 2),
+        invertTransform(x + p, y + p),
+        invertTransform(x + w - p, y + p),
+        invertTransform(x + p, y + h - p),
+        invertTransform(x + w - p, y + h - p)
+    ];
 
-    // Find all features that might intersect this cell
     const geoData = currentZoom > 3 ? townData : countyData;
-    if (!geoData) return null;
-
     const intersectingRegions = new Set();
 
-    // Check if cell center is inside any region
-    for (const feature of geoData.features) {
-        if (isPointInFeature(center, feature)) {
-            const regionName = getRegionName(feature);
-            intersectingRegions.add(regionName);
-            break; // Center can only be in one region
-        }
-    }
-
-    // If no intersection found at center, check corners
-    if (intersectingRegions.size === 0) {
-        const corners = [topLeft, topRight, bottomLeft, bottomRight];
-        for (const corner of corners) {
-            for (const feature of geoData.features) {
-                if (isPointInFeature(corner, feature)) {
-                    const regionName = getRegionName(feature);
-                    intersectingRegions.add(regionName);
-                }
+    for (const point of pointsToQuery) {
+        if (!point) continue;
+        for (const feature of geoData.features) {
+            if (d3.geoContains(feature, point)) {
+                intersectingRegions.add(getRegionName(feature));
             }
         }
     }
 
-    // Aggregate data from all intersecting regions
+    if (intersectingRegions.size === 0) return null;
     return aggregateDataFromRegions(Array.from(intersectingRegions));
 }
 
@@ -830,21 +816,10 @@ function isPointInFeature(point, feature) {
  */
 function getRegionName(feature) {
     const props = feature.properties;
-
-    // For TOWN level, return town name (e.g., "中正區", "板橋區")
-    if (props.TOWNNAME) {
-        return props.TOWNNAME;
-    }
-
-    // For COUNTY level, return county name (e.g., "台北市", "新北市")
-    if (props.COUNTYNAME) {
-        return props.COUNTYNAME;
-    }
-
-    // Fallback
-    return props.NAME || '未知';
+    const county = (props.COUNTYNAME || props.NAME || "").replace(/台/g, "臺").trim();
+    const town = (props.TOWNNAME || "").replace(/台/g, "臺").trim();
+    return town ? `${county}:${town}` : county;
 }
-
 /**
  * Aggregate data from multiple regions
  * @param {Array} regionNames - Array of region names from GeoJSON
@@ -857,74 +832,45 @@ function getRegionName(feature) {
 function aggregateDataFromRegions(regionNames) {
     if (!gridVizData || regionNames.length === 0) return null;
 
-    const aggregated = {
-        subjective: {},
-        objective: {},
-        regions: regionNames
-    };
-
-    // Initialize age groups
+    const aggregated = { subjective: {}, objective: {}, regions: regionNames };
     AGE_GROUPS.forEach(age => {
         aggregated.subjective[age] = {};
         aggregated.objective[age] = {};
     });
 
-    // Determine if we're at TOWN or COUNTY level based on region names
-    // COUNTY names (直轄市/縣): 台北市, 新北市, 桃園市, 台中市, 台南市, 高雄市, 新竹縣, 苗栗縣, etc.
-    // TOWN names (鄉/鎮/市/區): 中正區, 板橋區, 中壢區, 三峽區, etc.
-    // Note: Use length check to distinguish - county names are typically longer (3+ chars)
-    const isCountyLevel = regionNames.some(name => {
-        // Check if it's a county/municipality (直轄市 or 縣)
-        // Direct municipalities: 台北市, 新北市, 桃園市, 台中市, 台南市, 高雄市
-        // Counties: ends with 縣 and length >= 3
-        return (name.endsWith('縣')) ||
-               (name.endsWith('市') && name.length >= 3 &&
-                ['台北市', '新北市', '桃園市', '台中市', '台南市', '高雄市', '基隆市', '新竹市', '嘉義市'].includes(name));
+    const queryList = regionNames.map(r => {
+        const parts = r.split(':');
+        const co = parts[0].replace(/台/g, "臺").replace(/(市|縣)$/, "").trim();
+        const to = parts[1] ? parts[1].replace(/台/g, "臺").replace(/(市|鎮|鄉|區)$/, "").trim() : null;
+        return { county: co, town: to };
     });
 
-    console.log(`Aggregating data for regions:`, regionNames, `(${isCountyLevel ? 'COUNTY' : 'TOWN'} level)`);
-
-    // Aggregate data from all ZIP codes that match the region names
     for (const [zipCode, zipData] of Object.entries(gridVizData.zip_codes)) {
         if (!zipData.region) continue;
 
-        let matchesRegion = false;
+        const dataRegionRaw = zipData.region.replace(/台/g, "臺");
+        const dataRegionClean = dataRegionRaw.replace(/(市|縣|區|鎮|鄉)/g, "").replace(/\s+/g, "");
 
-        if (isCountyLevel) {
-            // COUNTY level: Check if ZIP region starts with any county name
-            // e.g., "台北市中正區" starts with "台北市"
-            matchesRegion = regionNames.some(countyName =>
-                zipData.region.startsWith(countyName)
-            );
-        } else {
-            // TOWN level: Check if ZIP region ends with any town name
-            // e.g., "台北市中正區" ends with "中正區"
-            matchesRegion = regionNames.some(townName =>
-                zipData.region.endsWith(townName)
-            );
-        }
+        const matchesRegion = queryList.some(q => {
+            if (q.town) {
+
+                return dataRegionClean.includes(q.county) && dataRegionClean.includes(q.town);
+            } else {
+                return dataRegionClean.includes(q.county);
+            }
+        });
 
         if (matchesRegion) {
-            // Aggregate subjective data
-            for (const [age, wealthDist] of Object.entries(zipData.subjective || {})) {
-                if (!aggregated.subjective[age]) aggregated.subjective[age] = {};
-                for (const [wealthClass, count] of Object.entries(wealthDist)) {
-                    aggregated.subjective[age][wealthClass] =
-                        (aggregated.subjective[age][wealthClass] || 0) + count;
+            ['subjective', 'objective'].forEach(mode => {
+                for (const [age, wealthDist] of Object.entries(zipData[mode] || {})) {
+                    if (!aggregated[mode][age]) aggregated[mode][age] = {};
+                    for (const [wClass, count] of Object.entries(wealthDist)) {
+                        aggregated[mode][age][wClass] = (aggregated[mode][age][wClass] || 0) + count;
+                    }
                 }
-            }
-
-            // Aggregate objective data
-            for (const [age, wealthDist] of Object.entries(zipData.objective || {})) {
-                if (!aggregated.objective[age]) aggregated.objective[age] = {};
-                for (const [wealthClass, count] of Object.entries(wealthDist)) {
-                    aggregated.objective[age][wealthClass] =
-                        (aggregated.objective[age][wealthClass] || 0) + count;
-                }
-            }
+            });
         }
     }
-
     return aggregated;
 }
 
@@ -989,7 +935,7 @@ function renderBarChartInCell(cellGroup, cellData, gridSize) {
                     .attr('height', barHeight)
                     .attr('fill', color)
                     .attr('opacity', 0.6)
-                    .on('mouseover', function(event) {
+                    .on('mouseover', function (event) {
                         d3.select(this).attr('opacity', 0.8);
                         showTooltip(
                             `年齡層: ${ageGroup}<br/>` +
@@ -1000,7 +946,7 @@ function renderBarChartInCell(cellGroup, cellData, gridSize) {
                             event.pageY
                         );
                     })
-                    .on('mouseout', function() {
+                    .on('mouseout', function () {
                         d3.select(this).attr('opacity', 0.6);
                         hideTooltip();
                     });
